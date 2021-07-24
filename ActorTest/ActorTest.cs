@@ -210,7 +210,7 @@ namespace ActorTest
                     ImGui.Text(a.text);
                     if (a.colored) ImGui.PopStyleColor();
                     ImGui.End();
-                    ImGui.PopStyleVar();
+                    ImGui.PopStyleVar(2);
                 }
             }
         }
