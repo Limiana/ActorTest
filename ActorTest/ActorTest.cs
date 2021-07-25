@@ -28,9 +28,9 @@ namespace ActorTest
         byte[] hostileMemory;
         byte[] friendlyMemory;
         Dictionary<int, byte> mem;
-        //[UnmanagedFunctionPointer(CallingConvention.ThisCall)]
-        //public delegate int GetIsTargetable(IntPtr gameObjectPtr);
-        //public GetIsTargetable getIsTargetable;
+        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
+        delegate byte Character_GetIsTargetable(IntPtr characterPtr);
+        Character_GetIsTargetable GetIsTargetable;
 
         public void Dispose()
         {
@@ -48,6 +48,9 @@ namespace ActorTest
             pi.UiBuilder.OnBuildUi += Draw;
             try
             {
+                var ptr = pi.TargetModuleScanner.ScanText("F3 0F 10 89 ?? ?? ?? ?? 0F 57 C0 0F 2E C8 7A 05 75 03 32 C0 C3 80 B9");
+                //pi.Framework.Gui.Chat.Print("Address: " + ptr);
+                GetIsTargetable = Marshal.GetDelegateForFunctionPointer<Character_GetIsTargetable>(ptr);
                 init = true;
             }
             catch (Exception e)
@@ -149,11 +152,6 @@ namespace ActorTest
                     var bnpcKind = bnpc.BattleNpcKind;
                     var oKind = bnpc.ObjectKind;
                     var friendly = *(int*)(a.Address + 0x8E) > 0;
-                    IntPtr vtable = *(IntPtr*)(a.Address);
-                    IntPtr vfunc = *(IntPtr*)(vtable + 5*8);
-                    //getIsTargetable = Marshal.GetDelegateForFunctionPointer<GetIsTargetable>(vfunc);
-                    //pi.Framework.Gui.Chat.Print(Convert.ToString((long)vfunc, 16));
-                    //pi.Framework.Gui.Chat.Print("B:"+Convert.ToString(*(long*)((long)Process.GetCurrentProcess().MainModule.BaseAddress + 0x1416F5E60), 16));
                     ActorSet.Add((a.Position,
                         a.Name
                               // + "\nKind: " + oKind
@@ -164,7 +162,7 @@ namespace ActorTest
                               //+ "\n0x15B: " + Convert.ToString(((BattleChara*)a.Address)->Character.GameObject.field_0x15B, 2).PadLeft(sizeof(byte)*8, '0')
                               //+ "\nAggroFlags: " + Convert.ToString(((BattleChara*)a.Address)->AggroFlags, 2).PadLeft(sizeof(int) *8, '0')
                               //+ "\nCombatFlags: " + Convert.ToString(((BattleChara*)a.Address)->CombatFlags, 2).PadLeft(sizeof(int)*8, '0')
-                        , GetIsTargetable((GameObject*)a.Address)));
+                        , GetIsTargetable(a.Address) > 0));
                 }
             }
             catch(Exception e)
@@ -174,7 +172,7 @@ namespace ActorTest
 
         }
 
-        bool GetIsTargetable(GameObject* obj)
+        /*bool GetIsTargetable(GameObject* obj)
         {
             byte bVar1;
 
@@ -185,7 +183,7 @@ namespace ActorTest
                 return (obj->RenderFlags & 0xffffe7f7U) == 0;
             }
             return false;
-        }
+        }*/
 
         private void Draw()
         {
