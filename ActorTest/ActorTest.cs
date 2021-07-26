@@ -35,6 +35,7 @@ namespace ActorTest
         byte memcurValue = 0;
         int curPos = 0;
         IntPtr GetUIModule;
+        int membase = 10;
 
         bool editingMemory = false;
         IntPtr lockedActor = IntPtr.Zero;
@@ -52,7 +53,8 @@ namespace ActorTest
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         delegate long unknownFunction(IntPtr ptr);
         unknownFunction UnknownFunction;
-        
+        private bool displayOverlay = true;
+
         /*[UnmanagedFunctionPointer(CallingConvention.StdCall)]
         delegate long sub_1407437A0(IntPtr a1, long a2);
         sub_1407437A0 sub_1407437A0Function;
@@ -106,6 +108,11 @@ namespace ActorTest
             pi.CommandManager.AddHandler("/at", new CommandInfo(delegate (string cmd, string args)
             {
                 if(args == "")
+                {
+                    displayOverlay = !displayOverlay;
+                    return;
+                }
+                if(args == "mismatch")
                 {
                     pi.Framework.Gui.Chat.Print("==========================");
                     for(int i = 0; i < 0x2C00; i++) 
@@ -257,12 +264,12 @@ namespace ActorTest
                 {
                     if (!(a is BattleNpc)) continue;
                     var bnpc = (BattleNpc)a;
+                    if (bnpc.CurrentHp == 0) continue;
                     var bnpcKind = bnpc.BattleNpcKind;
-                    var oKind = bnpc.ObjectKind;
-                    var friendly = *(int*)(a.Address + 0x8E) > 0;
+                    if (GetIsTargetable(a.Address) == 0) continue;
                     ActorSet.Add((a.Position,
                         a.Name
-                        + "/" + GetIsTargetable(a.Address)
+                        //+ "/" + GetIsTargetable(a.Address)
                         //+ "\nKind: " + oKind
                         //+ "/Subking: " + bnpcKind
                         // + "/0x17D: " + ((BattleChara*)a.Address)->field_0x17D
@@ -273,11 +280,30 @@ namespace ActorTest
                         //+ "\nCombatFlags: " + Convert.ToString(((BattleChara*)a.Address)->CombatFlags, 2).PadLeft(sizeof(int)*8, '0')
                         //+ "\nsub_1407437A0: " + Convert.ToString(sub_1407437A0Function(GameObjectManager, a.ActorId), 16)
                         //+ "\nID: " + Convert.ToString(a.ActorId, 16)
-                        + "\n0x1980: " + Convert.ToString(*(byte*)(a.Address + 0x1980), 2).PadLeft(sizeof(byte) * 8, '0')
-                        + "\n1400C6B90:" + UnknownFunction(a.Address)
-                        + "\n0x193C:" + *(byte*)(a.Address + 0x193C)
+                        + "\nH: " + IsHostileMemory(bnpc) + "/" + IsHostileFunction(bnpc)
+                        //+ "\n1400C6B90:" + UnknownFunction(a.Address)
+                        //+ "\n0x193C:" + *(byte*)(a.Address + 0x193C)
                         //+ "\n" + s->
-                        , GetIsTargetable(a.Address) > 0)); 
+                        , IsHostileMemory(bnpc) != IsHostileFunction(bnpc) && Environment.TickCount % 1000 > 500)); 
+                    if(IsHostileMemory(bnpc) != IsHostileFunction(bnpc))
+                    {
+                        PluginLog.Information("=== Mismatch of IsHostileMemory and IsHostileFunction ===");
+                        PluginLog.Information("PlateType: " + UnknownFunction(a.Address));
+                        PluginLog.Information("0x1980: " + *(byte*)(a.Address + 0x1980));
+                        PluginLog.Information("0x193C: " + *(byte*)(a.Address + 0x193C));
+                        PluginLog.Information("Actor name: " + a.Name);
+                        PluginLog.Information("BattleNpcKing: " + bnpc.BattleNpcKind);
+                        PluginLog.Information("Status Flags: " + bnpc.StatusFlags);
+                        /*var lst = new string[0x2C00];
+                        for (int i = 0; i < lst.Length; i++)
+                        {
+                            lst[i] = Convert.ToString(*(byte*)(a.Address + i), 16).ToUpper();
+                        }
+                        PluginLog.Information("== Memory dump ==");
+                        PluginLog.Information(string.Join("", lst));*/
+                        PluginLog.Information("=== Mismatch report end ===");
+                        pi.Framework.Gui.Chat.Print("Mismatch between hostile memory and hostile function");
+                    }
                 }
             }
             catch(Exception e)
@@ -285,6 +311,21 @@ namespace ActorTest
                 pi.Framework.Gui.Chat.Print("ActorTest error: " + e + "\n" + e.Message);
             }
 
+        }
+
+        bool IsHostileMemory(BattleNpc a)
+        {
+            return (*(byte*)(a.Address + 0x1980) & (1 << 2)) != 0 && *(byte*)(a.Address + 0x193C) != 1;
+        }
+
+        bool IsHostileFunction(BattleNpc a)
+        {
+            var plateType = UnknownFunction(a.Address);
+            //7: yellow, can be attacked, not engaged
+            //9: red, engaged with you
+            //11: orange, aggroed to you but not attacked yet
+            //10: engaged with other actor
+            return plateType == 7 || plateType == 9 || plateType == 11 || plateType == 10;
         }
 
         /*bool GetIsTargetable(GameObject* obj)
@@ -305,13 +346,14 @@ namespace ActorTest
             if (manualMemEdit)
             {
                 ImGui.Begin("Manual memory editing", ref manualMemEdit);
+                ImGui.InputInt("Base", ref membase);
                 ImGui.InputText("Address", ref addrStr, 100);
                 ImGui.InputText("Value", ref valStr, 100);
                 if (ImGui.Button("Read"))
                 {
                     try
                     {
-                        pi.Framework.Gui.Chat.Print(Convert.ToString(*(byte*)(pi.ClientState.Targets.CurrentTarget.Address + Convert.ToInt32(addrStr, 16))));
+                        pi.Framework.Gui.Chat.Print(Convert.ToString(*(byte*)(pi.ClientState.Targets.CurrentTarget.Address + Convert.ToInt32(addrStr, membase)), membase));
                     }
                     catch (Exception e)
                     {
@@ -322,7 +364,7 @@ namespace ActorTest
                 {
                     try
                     {
-                        *(byte*)(pi.ClientState.Targets.CurrentTarget.Address + Convert.ToInt32(addrStr, 16)) = Convert.ToByte(valStr, 16);
+                        *(byte*)(pi.ClientState.Targets.CurrentTarget.Address + Convert.ToInt32(addrStr, membase)) = Convert.ToByte(valStr, membase);
                     }
                     catch(Exception e)
                     {
@@ -359,8 +401,7 @@ namespace ActorTest
             var somebool = true;
             foreach(var a in ActorSet)
             {
-                if (!a.colored) continue;
-                if (pi.Framework.Gui.WorldToScreen(new SharpDX.Vector3(a.pos.X, a.pos.Z, a.pos.Y), out var screenPos))
+                if (displayOverlay && pi.Framework.Gui.WorldToScreen(new SharpDX.Vector3(a.pos.X, a.pos.Z, a.pos.Y), out var screenPos))
                 {
                     ImGuiHelpers.ForceNextWindowMainViewport();
                     ImGuiHelpers.SetNextWindowPosRelativeMainViewport(new Vector2(screenPos.X, screenPos.Y));
@@ -373,7 +414,7 @@ namespace ActorTest
                         ImGuiWindowFlags.NoMove | 
                         ImGuiWindowFlags.NoMouseInputs |
                         ImGuiWindowFlags.AlwaysUseWindowPadding);
-                    if (a.colored) ImGui.PushStyleColor(ImGuiCol.Text, 0xff00ff00);
+                    if (a.colored) ImGui.PushStyleColor(ImGuiCol.Text, 0xff0000ff);
                     ImGui.Text(a.text);
                     if (a.colored) ImGui.PopStyleColor();
                     ImGui.End();
