@@ -16,6 +16,8 @@ using System.Runtime.InteropServices;
 using Dalamud.Game.ClientState.Structs;
 using System.Diagnostics;
 using Dalamud.Game.Command;
+using Dalamud.Hooking;
+using FFXIVClientStructs.FFXIV.Client.UI;
 
 namespace ActorTest
 {
@@ -28,15 +30,42 @@ namespace ActorTest
         byte[] hostileMemory;
         byte[] friendlyMemory;
         Dictionary<int, byte> mem;
-        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
+        List<(int, byte)> memlist;
+        int memcurAddr = 0;
+        byte memcurValue = 0;
+        int curPos = 0;
+        IntPtr GetUIModule;
+
+        bool editingMemory = false;
+        IntPtr lockedActor = IntPtr.Zero;
+        
+        /*delegate long UnkFunc(long a1, uint a2, uint a3, long a4, byte a5, byte a6);
+        Hook<UnkFunc> UnkFuncHook;*/
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         delegate byte Character_GetIsTargetable(IntPtr characterPtr);
         Character_GetIsTargetable GetIsTargetable;
+        private bool manualMemEdit;
+        private string addrStr = "";
+        private string valStr = "";
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate long unknownFunction(IntPtr ptr);
+        unknownFunction UnknownFunction;
+        
+        /*[UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate long sub_1407437A0(IntPtr a1, long a2);
+        sub_1407437A0 sub_1407437A0Function;
+        IntPtr GameObjectManager;*/
+
 
         public void Dispose()
         {
             pi.Framework.OnUpdateEvent -= Tick;
             pi.UiBuilder.OnBuildUi -= Draw;
             pi.CommandManager.RemoveHandler("/at");
+            /*UnkFuncHook.Disable();
+            UnkFuncHook.Dispose();*/
             pi.Dispose();
         }
 
@@ -48,9 +77,26 @@ namespace ActorTest
             pi.UiBuilder.OnBuildUi += Draw;
             try
             {
+                GetUIModule = pi.TargetModuleScanner.ScanText("E8 ?? ?? ?? ?? 48 8B C8 48 85 C0 75 2D"); 
                 var ptr = pi.TargetModuleScanner.ScanText("F3 0F 10 89 ?? ?? ?? ?? 0F 57 C0 0F 2E C8 7A 05 75 03 32 C0 C3 80 B9");
-                //pi.Framework.Gui.Chat.Print("Address: " + ptr);
+                pi.Framework.Gui.Chat.Print("Address: " + ptr);
                 GetIsTargetable = Marshal.GetDelegateForFunctionPointer<Character_GetIsTargetable>(ptr);
+                var ptr2 = pi.TargetModuleScanner.ScanText("48 89 74 24 ?? 57 48 83 EC 20 48 8B 35 ?? ?? ?? ?? 48 8B F9 48 85 F6 75 0D");
+                UnknownFunction = Marshal.GetDelegateForFunctionPointer<unknownFunction>(ptr2);
+                /*
+                var ptr3 = pi.TargetModuleScanner.ScanText("48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 57 41 56 41 57 48 83 EC 20 8B B9");
+                sub_1407437A0Function = Marshal.GetDelegateForFunctionPointer<sub_1407437A0>(ptr3);
+
+                GameObjectManager = pi.TargetModuleScanner.GetStaticAddressFromSig("48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B D8 48 8B D3 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8D 8E");
+
+                pi.Framework.Gui.Chat.Print(GameObjectManager.ToString());
+                pi.Framework.Gui.Chat.Print(pi.TargetModuleScanner.GetStaticAddressFromSig("48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 44 0F B6 83").ToString());
+                */
+
+                /*var unkptr = pi.TargetModuleScanner.ScanText("48 89 5C 24 ?? 4C 89 4C 24 ?? 48 89 4C 24 ?? 55 56 57 48 81 EC");
+                UnkFuncHook = new Hook<UnkFunc>(unkptr, UnkFuncDetour);
+                UnkFuncHook.Enable();*/
+
                 init = true;
             }
             catch (Exception e)
@@ -71,6 +117,37 @@ namespace ActorTest
                     }
                     pi.Framework.Gui.Chat.Print("==========================");
                     return;
+                }
+                if(args == "manual")
+                {
+                    manualMemEdit = true;
+                    return;
+                }
+                if(args == "writediff")
+                {
+                    foreach (var e in mem)
+                    {
+                        var addr = pi.ClientState.Targets.CurrentTarget.Address;
+                        Marshal.WriteByte(addr, e.Key, e.Value);
+                    }
+                    pi.Framework.Gui.Chat.Print("Command Performed");
+                    return;
+                }
+                if(args == "func")
+                {
+                    //pi.Framework.Gui.Chat.Print(UnknownFunction(pi.ClientState.Targets.CurrentTarget.Address).ToString());
+                    return;
+                }
+                if(args == "mem")
+                {
+                    editingMemory = true;
+                    lockedActor = pi.ClientState.Targets.CurrentTarget.Address;
+                    memlist = new List<(int, byte)>();
+                    foreach (var e in mem)
+                    {
+                        memlist.Add((e.Key, e.Value));
+                    }
+                    curPos = 0;// memlist.Count - 1;
                 }
                 if (args == "init")
                 {
@@ -112,6 +189,16 @@ namespace ActorTest
                     pi.Framework.Gui.Chat.Print("Eliminated " + num + " different entries");
                     return;
                 }
+                if (args == "write0")
+                {
+                    *(byte*)(pi.ClientState.Targets.CurrentTarget.Address + 0x1980) = 0;
+                    return;
+                }
+                if (args == "write4")
+                {
+                    *(byte*)(pi.ClientState.Targets.CurrentTarget.Address + 0x1980) = 4;
+                    return;
+                }
                 if (args == "print")
                 {
                     foreach(var e in mem)
@@ -138,6 +225,26 @@ namespace ActorTest
             }));
         }
 
+        /*private long UnkFuncDetour(long a1, uint a2, uint a3, long a4, byte a5, byte a6)
+        {
+            try
+            {
+                if(a5 != 0)
+                pi.Framework.Gui.Chat.Print(Environment.TickCount + "\n" +
+                    "a1:" + Convert.ToString(a1, 16) +
+                    "\na2:" + a2 +
+                    "\na3:" + a3 +
+                    "\na4:" + Convert.ToString(a4, 16) +
+                    "\na5:" + a5 +
+                    "\na6:" + a6);
+            }
+            catch (Exception e)
+            {
+
+            }
+            return UnkFuncHook.Original(a1,  a2,  a3,  a4,a5,a6);
+        }*/
+
         [HandleProcessCorruptedStateExceptions]
         private void Tick(Framework framework)
         {
@@ -145,6 +252,7 @@ namespace ActorTest
             try
             {
                 ActorSet.Clear();
+                var s = (UIModule*)GetUIModule;
                 foreach (var a in pi.ClientState.Actors) 
                 {
                     if (!(a is BattleNpc)) continue;
@@ -154,15 +262,22 @@ namespace ActorTest
                     var friendly = *(int*)(a.Address + 0x8E) > 0;
                     ActorSet.Add((a.Position,
                         a.Name
-                              // + "\nKind: " + oKind
-                              // + "/Subking: " + bnpcKind
-                              // + "/0x17D: " + ((BattleChara*)a.Address)->field_0x17D
-                              //+ "\nStatus flags: " + bnpc.StatusFlags
-                              //+ "\n0x94: " + Convert.ToString(((BattleChara*)a.Address)->Character.GameObject.field_0x94, 2).PadLeft(sizeof(int)*8, '0')
-                              //+ "\n0x15B: " + Convert.ToString(((BattleChara*)a.Address)->Character.GameObject.field_0x15B, 2).PadLeft(sizeof(byte)*8, '0')
-                              //+ "\nAggroFlags: " + Convert.ToString(((BattleChara*)a.Address)->AggroFlags, 2).PadLeft(sizeof(int) *8, '0')
-                              //+ "\nCombatFlags: " + Convert.ToString(((BattleChara*)a.Address)->CombatFlags, 2).PadLeft(sizeof(int)*8, '0')
-                        , GetIsTargetable(a.Address) > 0));
+                        + "/" + GetIsTargetable(a.Address)
+                        //+ "\nKind: " + oKind
+                        //+ "/Subking: " + bnpcKind
+                        // + "/0x17D: " + ((BattleChara*)a.Address)->field_0x17D
+                        //+ "\nStatus flags: " + bnpc.StatusFlags
+                        //+ "\n0x94: " + Convert.ToString(((BattleChara*)a.Address)->Character.GameObject.field_0x94, 2).PadLeft(sizeof(int)*8, '0')
+                        //+ "\n0x15B: " + Convert.ToString(((BattleChara*)a.Address)->Character.GameObject.field_0x15B, 2).PadLeft(sizeof(byte)*8, '0')
+                        //+ "\nAggroFlags: " + Convert.ToString(((BattleChara*)a.Address)->AggroFlags, 2).PadLeft(sizeof(int) *8, '0')
+                        //+ "\nCombatFlags: " + Convert.ToString(((BattleChara*)a.Address)->CombatFlags, 2).PadLeft(sizeof(int)*8, '0')
+                        //+ "\nsub_1407437A0: " + Convert.ToString(sub_1407437A0Function(GameObjectManager, a.ActorId), 16)
+                        //+ "\nID: " + Convert.ToString(a.ActorId, 16)
+                        + "\n0x1980: " + Convert.ToString(*(byte*)(a.Address + 0x1980), 2).PadLeft(sizeof(byte) * 8, '0')
+                        + "\n1400C6B90:" + UnknownFunction(a.Address)
+                        + "\n0x193C:" + *(byte*)(a.Address + 0x193C)
+                        //+ "\n" + s->
+                        , GetIsTargetable(a.Address) > 0)); 
                 }
             }
             catch(Exception e)
@@ -187,10 +302,64 @@ namespace ActorTest
 
         private void Draw()
         {
+            if (manualMemEdit)
+            {
+                ImGui.Begin("Manual memory editing", ref manualMemEdit);
+                ImGui.InputText("Address", ref addrStr, 100);
+                ImGui.InputText("Value", ref valStr, 100);
+                if (ImGui.Button("Read"))
+                {
+                    try
+                    {
+                        pi.Framework.Gui.Chat.Print(Convert.ToString(*(byte*)(pi.ClientState.Targets.CurrentTarget.Address + Convert.ToInt32(addrStr, 16))));
+                    }
+                    catch (Exception e)
+                    {
+                        pi.Framework.Gui.Chat.Print(e.Message);
+                    }
+                }
+                if (ImGui.Button("Set"))
+                {
+                    try
+                    {
+                        *(byte*)(pi.ClientState.Targets.CurrentTarget.Address + Convert.ToInt32(addrStr, 16)) = Convert.ToByte(valStr, 16);
+                    }
+                    catch(Exception e)
+                    {
+                        pi.Framework.Gui.Chat.Print(e.Message);
+                    }
+                }
+                ImGui.End();
+            }
+            if (editingMemory)
+            {
+                if(ImGui.Begin("Actor memory editor", ref editingMemory))
+                {
+                    ImGui.Text("Offset: " + memcurAddr);
+                    ImGui.Text("Value: " + memcurValue);
+                    if (ImGui.Button("Next"))
+                    {
+                        if(memcurAddr != 0) 
+                        {
+                            Marshal.WriteByte(lockedActor, memcurAddr, memcurValue);
+                        }
+                        if(curPos < memlist.Count)
+                        {
+                            memcurAddr = memlist[curPos].Item1;
+                            memcurValue = Marshal.ReadByte(lockedActor, memcurAddr);
+                            Marshal.WriteByte(lockedActor, memcurAddr, memlist[curPos].Item2);
+                        }
+                        curPos++;
+                    }
+                    ImGui.EndChild();
+                }
+                ImGui.End();
+            }
             var i = 0;
             var somebool = true;
             foreach(var a in ActorSet)
             {
+                if (!a.colored) continue;
                 if (pi.Framework.Gui.WorldToScreen(new SharpDX.Vector3(a.pos.X, a.pos.Z, a.pos.Y), out var screenPos))
                 {
                     ImGuiHelpers.ForceNextWindowMainViewport();

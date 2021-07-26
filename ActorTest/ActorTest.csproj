@@ -44,6 +44,10 @@
     <Reference Include="Dalamud">
       <HintPath>..\..\dev\Dalamud.dll</HintPath>
     </Reference>
+    <Reference Include="EasyHook, Version=2.7.6270.0, Culture=neutral, PublicKeyToken=4b580fca19d0b0c5, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\dev\EasyHook.dll</HintPath>
+    </Reference>
     <Reference Include="FFXIVClientStructs">
       <HintPath>..\..\dev\FFXIVClientStructs.dll</HintPath>
     </Reference>
