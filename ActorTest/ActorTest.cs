@@ -413,6 +413,7 @@ namespace ActorTest
                         ImGuiWindowFlags.NoNav |
                         ImGuiWindowFlags.NoMove | 
                         ImGuiWindowFlags.NoMouseInputs |
+                        ImGuiWindowFlags.NoFocusOnAppearing |
                         ImGuiWindowFlags.AlwaysUseWindowPadding);
                     if (a.colored) ImGui.PushStyleColor(ImGuiCol.Text, 0xff0000ff);
                     ImGui.Text(a.text);
