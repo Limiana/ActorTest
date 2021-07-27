@@ -315,7 +315,8 @@ namespace ActorTest
 
         bool IsHostileMemory(BattleNpc a)
         {
-            return (*(byte*)(a.Address + 0x1980) & (1 << 2)) != 0 && *(byte*)(a.Address + 0x193C) != 1;
+            var kind = (int)a.BattleNpcKind;
+            return (kind == 1 || kind == 2) && (*(byte*)(a.Address + 0x1980) & (1 << 2)) != 0 && *(byte*)(a.Address + 0x193C) != 1;
         }
 
         bool IsHostileFunction(BattleNpc a)
