@@ -35,6 +35,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup>
     <StartupObject />
   </PropertyGroup>
   <ItemGroup>
@@ -56,6 +59,14 @@
     </Reference>
     <Reference Include="ImGuiScene">
       <HintPath>..\..\dev\ImGuiScene.dll</HintPath>
+    </Reference>
+    <Reference Include="Lumina, Version=3.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\dev\Lumina.dll</HintPath>
+    </Reference>
+    <Reference Include="Lumina.Excel, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\dev\Lumina.Excel.dll</HintPath>
     </Reference>
     <Reference Include="SharpDX">
       <HintPath>..\..\dev\SharpDX.dll</HintPath>

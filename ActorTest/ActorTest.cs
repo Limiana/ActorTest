@@ -18,6 +18,8 @@ using System.Diagnostics;
 using Dalamud.Game.Command;
 using Dalamud.Hooking;
 using FFXIVClientStructs.FFXIV.Client.UI;
+using Lumina.Excel.GeneratedSheets;
+using FFXIVClientStructs.FFXIV.Client.System.String;
 
 namespace ActorTest
 {
@@ -46,6 +48,7 @@ namespace ActorTest
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         delegate byte Character_GetIsTargetable(IntPtr characterPtr);
         Character_GetIsTargetable GetIsTargetable;
+
         private bool manualMemEdit;
         private string addrStr = "";
         private string valStr = "";
@@ -110,6 +113,11 @@ namespace ActorTest
                 if(args == "")
                 {
                     displayOverlay = !displayOverlay;
+                    return;
+                }
+                if(args == "a")
+                {
+                    pi.Framework.Gui.Chat.Print(pi.Data.GetExcelSheet<TerritoryType>().GetRow(pi.ClientState.TerritoryType).Map.Value.SizeFactor+"");
                     return;
                 }
                 if(args == "mismatch")
@@ -274,7 +282,7 @@ namespace ActorTest
                         //+ "/Subking: " + bnpcKind
                         // + "/0x17D: " + ((BattleChara*)a.Address)->field_0x17D
                         //+ "\nStatus flags: " + bnpc.StatusFlags
-                        //+ "\n0x94: " + Convert.ToString(((BattleChara*)a.Address)->Character.GameObject.field_0x94, 2).PadLeft(sizeof(int)*8, '0')
+                        //+ "\n0x1980: " + Convert.ToString(*(byte*)(a.Address+0x1980), 2).PadLeft(sizeof(byte)*8, '0')
                         //+ "\n0x15B: " + Convert.ToString(((BattleChara*)a.Address)->Character.GameObject.field_0x15B, 2).PadLeft(sizeof(byte)*8, '0')
                         //+ "\nAggroFlags: " + Convert.ToString(((BattleChara*)a.Address)->AggroFlags, 2).PadLeft(sizeof(int) *8, '0')
                         //+ "\nCombatFlags: " + Convert.ToString(((BattleChara*)a.Address)->CombatFlags, 2).PadLeft(sizeof(int)*8, '0')
@@ -292,7 +300,7 @@ namespace ActorTest
                         PluginLog.Information("0x1980: " + *(byte*)(a.Address + 0x1980));
                         PluginLog.Information("0x193C: " + *(byte*)(a.Address + 0x193C));
                         PluginLog.Information("Actor name: " + a.Name);
-                        PluginLog.Information("BattleNpcKing: " + bnpc.BattleNpcKind);
+                        PluginLog.Information("BattleNpcKing: " + (int)bnpc.BattleNpcKind);
                         PluginLog.Information("Status Flags: " + bnpc.StatusFlags);
                         /*var lst = new string[0x2C00];
                         for (int i = 0; i < lst.Length; i++)
@@ -315,18 +323,24 @@ namespace ActorTest
 
         bool IsHostileMemory(BattleNpc a)
         {
-            var kind = (int)a.BattleNpcKind;
-            return (kind == 1 || kind == 2) && (*(byte*)(a.Address + 0x1980) & (1 << 2)) != 0 && *(byte*)(a.Address + 0x193C) != 1;
+            return (a.BattleNpcKind == BattleNpcSubKind.Enemy || (int)a.BattleNpcKind == 1) 
+                && *(byte*)(a.Address + 0x1980) != 0 
+                && *(byte*)(a.Address + 0x193C) != 1;
         }
 
         bool IsHostileFunction(BattleNpc a)
         {
             var plateType = UnknownFunction(a.Address);
             //7: yellow, can be attacked, not engaged
+            //8: ??? hostile
             //9: red, engaged with you
             //11: orange, aggroed to you but not attacked yet
             //10: engaged with other actor
-            return plateType == 7 || plateType == 9 || plateType == 11 || plateType == 10;
+            if(plateType == 8)
+            {
+                pi.Framework.Gui.Chat.Print("plate type = 8 for " + a.Name);
+            }
+            return plateType == 7 || plateType == 9 || plateType == 11 || plateType == 10 || plateType == 8;
         }
 
         /*bool GetIsTargetable(GameObject* obj)
