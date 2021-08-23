@@ -20,6 +20,7 @@ using Dalamud.Hooking;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using Lumina.Excel.GeneratedSheets;
 using FFXIVClientStructs.FFXIV.Client.System.String;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace ActorTest
 {
@@ -77,11 +78,20 @@ namespace ActorTest
         [HandleProcessCorruptedStateExceptions]
         public void Initialize(DalamudPluginInterface pluginInterface)
         {
+            var coll = new Dictionary<int, int>();
+            coll.Add(1, 2);
+            coll.Add(2, 3);
+            foreach(var a in coll.Keys.ToArray())
+            {
+                coll[a] = 5;
+            }
             pi = pluginInterface;
             pi.Framework.OnUpdateEvent += Tick;
             pi.UiBuilder.OnBuildUi += Draw;
             try
             {
+                var a = pi.TargetModuleScanner.ScanText("48 89 5C 24 ?? 57 48 83 EC 30 80 B9 ?? ?? ?? ?? ?? 49 8B F8 0F 29 74 24") + 0x55;
+                pi.Framework.Gui.Chat.Print(Convert.ToString((long)a, 16));
                 GetUIModule = pi.TargetModuleScanner.ScanText("E8 ?? ?? ?? ?? 48 8B C8 48 85 C0 75 2D"); 
                 var ptr = pi.TargetModuleScanner.ScanText("F3 0F 10 89 ?? ?? ?? ?? 0F 57 C0 0F 2E C8 7A 05 75 03 32 C0 C3 80 B9");
                 pi.Framework.Gui.Chat.Print("Address: " + ptr);
@@ -260,10 +270,14 @@ namespace ActorTest
             return UnkFuncHook.Original(a1,  a2,  a3,  a4,a5,a6);
         }*/
 
+
         [HandleProcessCorruptedStateExceptions]
         private void Tick(Framework framework)
         {
-            if (!init) return;
+            
+            var Atalk = pi.Framework.Gui.GetUiObjectByName("Talk", 1);
+            var isTalking = Atalk != IntPtr.Zero && ((AtkUnitBase*)Atalk)->IsVisible;
+                if (!init) return;
             try
             {
                 ActorSet.Clear();
@@ -272,7 +286,7 @@ namespace ActorTest
                 {
                     if (!(a is BattleNpc)) continue;
                     var bnpc = (BattleNpc)a;
-                    if (bnpc.CurrentHp == 0) continue;
+                    if (IsDead(bnpc)) continue;
                     var bnpcKind = bnpc.BattleNpcKind;
                     if (GetIsTargetable(a.Address) == 0) continue;
                     ActorSet.Add((a.Position,
@@ -332,15 +346,16 @@ namespace ActorTest
         {
             var plateType = UnknownFunction(a.Address);
             //7: yellow, can be attacked, not engaged
-            //8: ??? hostile
+            //8: dead
             //9: red, engaged with you
             //11: orange, aggroed to you but not attacked yet
             //10: engaged with other actor
-            if(plateType == 8)
-            {
-                pi.Framework.Gui.Chat.Print("plate type = 8 for " + a.Name);
-            }
-            return plateType == 7 || plateType == 9 || plateType == 11 || plateType == 10 || plateType == 8;
+            return plateType == 7 || plateType == 9 || plateType == 11 || plateType == 10;
+        }
+
+        bool IsDead(BattleNpc a)
+        {
+            return *(byte*)(a.Address + 6524) == 2;
         }
 
         /*bool GetIsTargetable(GameObject* obj)
