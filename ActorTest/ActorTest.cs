@@ -347,9 +347,9 @@ namespace ActorTest
             var plateType = UnknownFunction(a.Address);
             //7: yellow, can be attacked, not engaged
             //8: dead
-            //9: red, engaged with you
-            //11: orange, aggroed to you but not attacked yet
-            //10: engaged with other actor
+            //9: red, engaged with your party
+            //11: orange, aggroed to your party but not attacked yet
+            //10: purple, engaged with other party
             return plateType == 7 || plateType == 9 || plateType == 11 || plateType == 10;
         }
 
